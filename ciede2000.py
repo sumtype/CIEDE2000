@@ -57,6 +57,10 @@ def xyz2lab(xyz):
     lab[2] = 200. * (xyz[1] - xyz[2])
     return lab
 
+# Converts RGB pixel array into LAB format.
+def rgb2lab(rgb):
+    return xyz2lab(rgb2xyz(rgb))
+
 # Returns CIEDE2000 comparison results of two LAB formatted colors.
 # Translated from CIEDE2000 implementation in https://github.com/markusn/color-diff
 def ciede2000(lab1, lab2):
