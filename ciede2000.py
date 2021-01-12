@@ -1,4 +1,4 @@
-# Copyright (c) 2017, JAMES MASON
+# Copyright (c) 2021, JAMES MASON
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -62,60 +62,61 @@ def rgb2lab(rgb):
     return xyz2lab(rgb2xyz(rgb))
 
 # Returns CIEDE2000 comparison results of two LAB formatted colors.
-# Translated from CIEDE2000 implementation in https://github.com/markusn/color-diff
+# Implementation derived from the excel spreadsheet provided here: http://www2.ece.rochester.edu/~gsharma/ciede2000/
 def ciede2000(lab1, lab2):
-    def degrees(n): return n * (180. / np.pi)
-    def radians(n): return n * (np.pi / 180.)
-    def hpf(x, y):
-        if x == 0 and y == 0: return 0
-        else:
-            tmphp = degrees(np.arctan2(x, y))
-            if tmphp >= 0: return tmphp
-            else: return tmphp + 360.
-        return None
-    def dhpf(c1, c2, h1p, h2p):
-        if c1 * c2 == 0: return 0
-        elif np.abs(h2p - h1p) <= 180: return h2p - h1p
-        elif h2p - h1p > 180: return (h2p - h1p) - 360.
-        elif h2p - h1p < 180: return (h2p - h1p) + 360.
-        else: return None
-    def ahpf(c1, c2, h1p, h2p):
-        if c1 * c2 == 0: return h1p + h2p
-        elif np.abs(h1p - h2p) <= 180: return (h1p + h2p) / 2.
-        elif np.abs(h1p - h2p) > 180 and h1p + h2p < 360: return (h1p + h2p + 360.) / 2.
-        elif np.abs(h1p - h2p) > 180 and h1p + h2p >= 360: return (h1p + h2p - 360.) / 2.
-        return None
     L1 = lab1[0]
     A1 = lab1[1]
     B1 = lab1[2]
     L2 = lab2[0]
     A2 = lab2[1]
     B2 = lab2[2]
-    kL = 1
-    kC = 1
-    kH = 1
     C1 = np.sqrt((A1 ** 2.) + (B1 ** 2.))
     C2 = np.sqrt((A2 ** 2.) + (B2 ** 2.))
-    aC1C2 = (C1 + C2) / 2.
+    aC1C2 = np.average([C1, C2])
     G = 0.5 * (1. - np.sqrt((aC1C2 ** 7.) / ((aC1C2 ** 7.) + (25. ** 7.))))
     a1P = (1. + G) * A1
     a2P = (1. + G) * A2
     c1P = np.sqrt((a1P ** 2.) + (B1 ** 2.))
     c2P = np.sqrt((a2P ** 2.) + (B2 ** 2.))
-    h1P = hpf(B1, a1P)
-    h2P = hpf(B2, a2P)
+    if a1P == 0 and B1 == 0: h1P = 0
+    else:
+        if B1 >= 0: h1P = np.degrees(np.arctan2(B1, a1P))
+        else: h1P = np.degrees(np.arctan2(B1, a1P)) + 360.
+    if a2P == 0 and B2 == 0: h2P = 0
+    else:
+        if B2 >= 0: h2P = np.degrees(np.arctan2(B2, a2P))
+        else: h2P = np.degrees(np.arctan2(B2, a2P)) + 360.
     dLP = L2 - L1
     dCP = c2P - c1P
-    dhP = dhpf(C1, C2, h1P, h2P)
-    dHP = 2. * np.sqrt(c1P * c2P) * np.sin(radians(dhP) / 2.)
-    aL = (L1 + L2) / 2.
-    aCP = (c1P + c2P) / 2.
-    aHP = ahpf(C1, C2, h1P, h2P)
-    T = 1. - 0.17 * np.cos(radians(aHP - 39)) + 0.24 * np.cos(radians(2. * aHP)) + 0.32 * np.cos(radians(3. * aHP + 6.)) - 0.2 * np.cos(radians(4. * aHP - 63.))
-    dRO = 30. * np.exp(-1. * (((aHP - 275.) / 25.) ** 2.))
-    rC = np.sqrt((aCP ** 7.) / ((aCP ** 7.) + (25. ** 7.)))
-    sL = 1. + ((0.015 * ((aL - 50.) ** 2.)) / np.sqrt(20. + ((aL - 50.) ** 2.)))
+    if h2P - h1P > 180: dhC = 1
+    elif h2P - h1P < -180: dhC = 2
+    else: dhC = 0
+    if dhC == 0: dhP = h2P - h1P
+    elif dhC == 1: dhP = h2P - h1P - 360.
+    else: dhP = h2P + 360 - h1P
+    dHP = 2. * np.sqrt(c1P * c2P) * np.sin(np.radians(dhP / 2.))
+    aL = np.average([L1, L2])
+    aCP = np.average([c1P, c2P])
+    if c1P * c2P == 0: haC = 3
+    elif np.absolute(h2P - h1P) <= 180: haC = 0
+    elif h2P + h1P < 360: haC = 1
+    else: haC = 2
+    haP = np.average([h1P, h2P])
+    if haC == 3: aHP = h1P + h2P
+    elif haC == 0: aHP = haP
+    elif haC == 1: aHP = haP + 180
+    else: aHP = haP - 180
+    lPa50 = (aL - 50) ** 2.
+    sL = 1. + (0.015 * lPa50 / np.sqrt(20. + lPa50))
     sC = 1. + 0.045 * aCP
+    T = 1. - 0.17 * np.cos(np.radians(aHP - 30.)) + 0.24 * np.cos(np.radians(2. * aHP)) + 0.32 * np.cos(np.radians(3. * aHP + 6.)) - 0.2 * np.cos(np.radians(4. * aHP - 63.))
     sH = 1. + 0.015 * aCP * T
-    rT = -2. * rC * np.sin(radians(2. * dRO))
-    return np.sqrt(((dLP / (sL * kL)) ** 2.) + ((dCP / (sC * kC)) ** 2.) + ((dHP / (sH * kH)) ** 2.) + rT * (dCP / (sC * kC)) * (dHP / (sH * kH)))
+    dTheta = 30. * np.exp(-1. * ((aHP - 275.) / 25.) ** 2.)
+    rC = 2. * np.sqrt((aCP ** 7.) / ((aCP ** 7.) + (25. ** 7.)))
+    rC = 2. * np.sqrt(aCP ** 7. / (aCP ** 7. + 25. ** 7.))
+    rT = -np.sin(np.radians(2. * dTheta)) * rC
+    fL = dLP / sL / 1.
+    fC = dCP / sC / 1.
+    fH = dHP / sH / 1.
+    dE2000 = np.sqrt(fL ** 2. + fC ** 2. + fH ** 2. + rT * fC * fH)
+    return dE2000
